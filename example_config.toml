@@ -1,0 +1,36 @@
+# Video Composite Configuration
+
+# Output settings
+[output]
+path = "output_composite.mp4"
+# fps = 24  # Optional: Leave unset to auto-detect from input videos
+preset = "ultrafast"  # Encoding speed: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow
+threads = 4  # Number of CPU threads to use for encoding
+bitrate = "5000k"  # Video bitrate (e.g., "5000k", "10000k" for higher quality)
+
+# Text styling
+[text]
+heading_font_size = 60
+subheading_font_size = 36
+color = "white"
+bg_color = [0, 0, 0]  # RGB values
+bg_opacity = 0.7
+# Note: Spacing and padding are automatically calculated based on font sizes
+# Spacing between lines = 50% of heading_font_size
+# Vertical padding = 60% of heading_font_size
+
+# Videos to composite (side by side)
+[[videos]]
+path = "video1.mp4"
+heading = "First Video"
+subheading = "Description for first video"
+
+[[videos]]
+path = "video2.mp4"
+heading = "Second Video"
+subheading = "Description for second video"
+
+[[videos]]
+path = "video3.mp4"
+heading = "Third Video"
+subheading = "Description for third video"
