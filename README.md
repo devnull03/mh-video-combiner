@@ -44,14 +44,26 @@ pip install moviepy
 
 **Note**: The script uses Python's built-in `tomllib` (available in Python 3.11+) for TOML parsing, so no additional TOML library is needed.
 
-## Performance
+## Performance Optimization
 
-Video encoding can be slow. The script uses optimized settings by default:
-- **Preset**: `ultrafast` - Fastest encoding speed (lower quality)
+Video encoding can be slow. The script includes several optimizations:
+
+### Default Optimizations (Already Active)
+- **Preset**: `ultrafast` - Fastest encoding speed
 - **Threads**: `4` - Uses multiple CPU cores
 - **Bitrate**: `5000k` - Balanced quality/size
+- **Audio**: Disabled - No audio processing for faster encoding
+- **Logging**: Disabled - Reduces I/O overhead
+- **FPS**: Auto-detected from source videos
 
-You can adjust these in your config file to trade speed for quality.
+### Additional Speed Improvements
+1. **Increase threads** to match your CPU cores (e.g., `threads = 8`)
+2. **Lower bitrate** for faster encoding (e.g., `bitrate = "3000k"`)
+3. **Use smaller source videos** - resize large 4K videos to 1080p first
+4. **Test with short clips** before processing long videos
+
+### Ultra-Fast Alternative (No Text Overlays)
+For maximum speed without text overlays, see `ffmpeg_fallback.py` which uses direct ffmpeg commands and can be **10-50x faster** than MoviePy rendering.
 
 ## Usage
 
@@ -241,6 +253,27 @@ heading = "🎥 Top"
 subheading = "Overhead"
 ```
 
+## Ultra-Fast Mode (Advanced)
+
+If you need maximum speed and don't need text overlays, you can use the ffmpeg fallback:
+
+```python
+from ffmpeg_fallback import create_side_by_side_ffmpeg
+
+create_side_by_side_ffmpeg(
+    ["video1.mp4", "video2.mp4", "video3.mp4"],
+    "output.mp4",
+    preset="ultrafast",
+    threads=8
+)
+```
+
+**Trade-offs:**
+- ✅ 10-50x faster than MoviePy
+- ✅ Direct ffmpeg processing
+- ❌ No text overlays
+- ❌ No dynamic spacing
+
 ## Troubleshooting
 
 ### Font Errors
@@ -264,14 +297,21 @@ For very large videos or many videos, consider:
 
 ### Slow Encoding
 
-To speed up encoding:
-- Use `preset = "ultrafast"` or `"superfast"` (fastest but larger files)
-- Increase `threads` to match your CPU cores
-- Lower the `bitrate` (e.g., "3000k" instead of "5000k")
+**Quick fixes:**
+- ✅ Already using `preset = "ultrafast"` by default
+- ✅ Already disabled audio and logging
+- Increase `threads` to match your CPU cores (e.g., 8, 16)
+- Lower the `bitrate` (e.g., "2000k" or "3000k")
+- Test with short video clips first
 
-For better quality (slower):
+**For better quality (slower):**
 - Use `preset = "medium"` or `"slow"`
 - Increase `bitrate` (e.g., "10000k" or higher)
+
+**Still too slow?**
+- Consider using `ffmpeg_fallback.py` for ultra-fast processing (no text overlays)
+- Pre-process videos: resize to lower resolution, trim unnecessary portions
+- Process videos in smaller batches
 
 ## Project Structure
 
