@@ -19,18 +19,40 @@ bg_opacity = 0.7
 # Spacing between lines = 50% of heading_font_size
 # Vertical padding = 60% of heading_font_size
 
-# Videos to composite (side by side)
+# Videos/Images to composite (side by side)
+# Note: Images are auto-detected by extension (.jpg, .png, etc.)
+# You can also manually set is_image = true/false
 [[videos]]
 path = "video1.mp4"
 heading = "First Video"
 subheading = "Description for first video"
+# audio_path = "custom_audio1.mp3"  # Optional: Use a different audio track for this video
 
 [[videos]]
 path = "video2.mp4"
 heading = "Second Video"
 subheading = "Description for second video"
+# audio_path = "custom_audio2.mp3"  # Optional: Use a different audio track for this video
 
 [[videos]]
-path = "video3.mp4"
-heading = "Third Video"
-subheading = "Description for third video"
+path = "image1.jpg"  # Images are supported too!
+heading = "Static Image"
+subheading = "This will be shown as a static frame"
+# is_image = true  # Optional: Force as image (auto-detected by extension)
+# audio_path = "audio_for_image.mp3"  # Optional: Add audio to image
+
+# Images (shown side-by-side with videos in the grid)
+# These are added AFTER the [[videos]] entries
+# Images will be automatically scaled and positioned alongside videos
+
+# Example 1: Show a reference image
+# [[image]]
+# path = "reference.jpg"
+# heading = "Reference Image"
+# subheading = "Original reference"
+
+# Example 2: Another comparison image
+# [[image]]
+# path = "comparison.png"
+# heading = "Comparison"
+# subheading = "Side by side view"
