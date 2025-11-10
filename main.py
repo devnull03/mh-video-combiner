@@ -170,7 +170,11 @@ def create_composite_video(config):
     print(f"  Stacking {len(processed_streams)} videos horizontally...")
     stacked = ffmpeg.filter(processed_streams, "hstack", inputs=len(processed_streams))
 
-    # Step 3: Output with encoding settings
+    # Step 3: Get audio from first video
+    print("\nAdding audio from first video...")
+    first_audio = input_streams[0].audio
+
+    # Step 4: Output with encoding settings
     print("\nEncoding video with ffmpeg...")
     print(f"  Preset: {config.output_preset}")
     print(f"  Threads: {config.output_threads}")
@@ -181,19 +185,22 @@ def create_composite_video(config):
     try:
         output = ffmpeg.output(
             stacked,
+            first_audio,
             str(config.output_path),
             r=output_fps,
             vcodec="libx264",
+            acodec="aac",
+            audio_bitrate="192k",
             preset=config.output_preset,
             video_bitrate=config.output_bitrate,
             threads=config.output_threads,
-            an=None,  # No audio
         )
 
         # Run with error stats
         ffmpeg.run(output, overwrite_output=True, quiet=False)
 
         print(f"\n✓ Video composite saved to: {config.output_path}")
+        print("✓ Audio from first video included")
         print("\n✓ Done!")
 
     except ffmpeg.Error as e:
