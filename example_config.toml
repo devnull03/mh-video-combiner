@@ -7,32 +7,40 @@ path = "output_composite.mp4"
 preset = "ultrafast"  # Encoding speed: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow
 threads = 4  # Number of CPU threads to use for encoding
 bitrate = "5000k"  # Video bitrate (e.g., "5000k", "10000k" for higher quality)
+show_frame_count = true  # Show frame count overlay in top-left corner of each video (default: true)
+# working_dir = "my_videos"  # Optional: Prepend this directory to all relative paths (videos, images, audio, output)
+# Example: If working_dir = "my_videos" and path = "video1.mp4", actual path will be "my_videos/video1.mp4"
 
 # Text styling
 [text]
 heading_font_size = 60
 subheading_font_size = 36
+frame_count_font_size = 30  # Font size for frame count in top-left corner
 color = "white"
 bg_color = [0, 0, 0]  # RGB values
 bg_opacity = 0.7
 # Note: Spacing and padding are automatically calculated based on font sizes
 # Spacing between lines = 50% of heading_font_size
 # Vertical padding = 60% of heading_font_size
+# Frame count (if enabled) appears in top-left corner with background box
 
 # Videos/Images to composite (side by side)
 # Note: Images are auto-detected by extension (.jpg, .png, etc.)
 # You can also manually set is_image = true/false
+# Note: If working_dir is set, all relative paths will be prepended with it
 [[videos]]
 path = "video1.mp4"
 heading = "First Video"
 subheading = "Description for first video"
 # audio_path = "custom_audio1.mp3"  # Optional: Use a different audio track for this video
+# frame_count_override = 150  # Optional: Manually override the displayed frame count (useful for correcting detection issues)
 
 [[videos]]
 path = "video2.mp4"
 heading = "Second Video"
 subheading = "Description for second video"
 # audio_path = "custom_audio2.mp3"  # Optional: Use a different audio track for this video
+# frame_count_override = 300  # Optional: Override frame count if auto-detection is wrong
 
 [[videos]]
 path = "image1.jpg"  # Images are supported too!
@@ -40,6 +48,7 @@ heading = "Static Image"
 subheading = "This will be shown as a static frame"
 # is_image = true  # Optional: Force as image (auto-detected by extension)
 # audio_path = "audio_for_image.mp3"  # Optional: Add audio to image
+# frame_count_override = 1  # Optional: Can be used for images too
 
 # Images (shown side-by-side with videos in the grid)
 # These are added AFTER the [[videos]] entries

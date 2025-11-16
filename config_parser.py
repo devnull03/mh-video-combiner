@@ -18,11 +18,13 @@ class VideoConfig:
         subheading: str = "",
         audio_path: str = "",
         is_image: bool = None,
+        frame_count_override: int = None,
     ):
         self.path = Path(path)
         self.heading = heading
         self.subheading = subheading
         self.audio_path = Path(audio_path) if audio_path else None
+        self.frame_count_override = frame_count_override
         # Auto-detect if it's an image based on extension if not specified
         if is_image is None:
             image_extensions = {
@@ -59,18 +61,28 @@ class CompositeConfig:
     def __init__(self, config_dict: Dict[str, Any]):
         self.videos: List[VideoConfig] = []
         output_config = config_dict.get("output", {})
-        self.output_path = output_config.get("path", "output_composite.mp4")
+        self.working_dir = output_config.get("working_dir", "")
+
+        # Get output path and prepend working_dir if relative
+        output_path = output_config.get("path", "output_composite.mp4")
+        if self.working_dir and not Path(output_path).is_absolute():
+            self.output_path = str(Path(self.working_dir) / output_path)
+        else:
+            self.output_path = output_path
+
         self.output_fps = output_config.get(
             "fps", None
         )  # None = auto-detect from videos
         self.output_preset = output_config.get("preset", "ultrafast")
         self.output_threads = output_config.get("threads", 4)
         self.output_bitrate = output_config.get("bitrate", "15000k")
+        self.show_frame_count = output_config.get("show_frame_count", True)
 
         # Text styling
         text_config = config_dict.get("text", {})
         self.heading_font_size = text_config.get("heading_font_size", 60)
         self.subheading_font_size = text_config.get("subheading_font_size", 36)
+        self.frame_count_font_size = text_config.get("frame_count_font_size", 30)
         self.text_color = text_config.get("color", "white")
         self.text_bg_color = tuple(text_config.get("bg_color", [0, 0, 0]))
         self.text_bg_opacity = text_config.get("bg_opacity", 0.7)
@@ -78,24 +90,44 @@ class CompositeConfig:
         # Parse videos
         videos_list = config_dict.get("videos", [])
         for video_data in videos_list:
+            video_path = video_data.get("path", "")
+            # Prepend working_dir if set and path is not absolute
+            if self.working_dir and not Path(video_path).is_absolute():
+                video_path = str(Path(self.working_dir) / video_path)
+
+            audio_path = video_data.get("audio_path", "")
+            if audio_path and self.working_dir and not Path(audio_path).is_absolute():
+                audio_path = str(Path(self.working_dir) / audio_path)
+
             video = VideoConfig(
-                path=video_data.get("path", ""),
+                path=video_path,
                 heading=video_data.get("heading", ""),
                 subheading=video_data.get("subheading", ""),
-                audio_path=video_data.get("audio_path", ""),
+                audio_path=audio_path,
                 is_image=video_data.get("is_image", None),
+                frame_count_override=video_data.get("frame_count_override", None),
             )
             self.videos.append(video)
 
         # Parse images (they get added as additional videos in the grid)
         images_list = config_dict.get("image", [])
         for image_data in images_list:
+            image_path = image_data.get("path", "")
+            # Prepend working_dir if set and path is not absolute
+            if self.working_dir and not Path(image_path).is_absolute():
+                image_path = str(Path(self.working_dir) / image_path)
+
+            audio_path = image_data.get("audio_path", "")
+            if audio_path and self.working_dir and not Path(audio_path).is_absolute():
+                audio_path = str(Path(self.working_dir) / audio_path)
+
             image = VideoConfig(
-                path=image_data.get("path", ""),
+                path=image_path,
                 heading=image_data.get("heading", ""),
                 subheading=image_data.get("subheading", ""),
-                audio_path=image_data.get("audio_path", ""),
+                audio_path=audio_path,
                 is_image=True,  # Force as image
+                frame_count_override=image_data.get("frame_count_override", None),
             )
             self.videos.append(image)
 
@@ -161,11 +193,14 @@ path = "output_composite.mp4"
 preset = "ultrafast"  # Encoding speed: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow
 threads = 4  # Number of CPU threads to use for encoding
 bitrate = "5000k"  # Video bitrate (e.g., "5000k", "10000k" for higher quality)
+show_frame_count = true  # Show frame count in analysis output (default: true)
+# working_dir = "vid2"  # Optional: Prepend this directory to all relative paths (videos, images, audio)
 
 # Text styling
 [text]
 heading_font_size = 60
 subheading_font_size = 36
+frame_count_font_size = 30  # Font size for frame count in top-left corner
 color = "white"
 bg_color = [0, 0, 0]  # RGB values
 bg_opacity = 0.7
@@ -176,17 +211,20 @@ bg_opacity = 0.7
 # Videos/Images to composite (side by side)
 # Note: Images are auto-detected by extension (.jpg, .png, etc.)
 # You can also manually set is_image = true/false
+# Note: If working_dir is set, all relative paths will be prepended with it
 [[videos]]
-path = "video1.mp4"
+path = "video1.mp4"  # Will become "working_dir/video1.mp4" if working_dir is set
 heading = "First Video"
 subheading = "Description for first video"
 # audio_path = "custom_audio1.mp3"  # Optional: Use a different audio track for this video
+# frame_count_override = 150  # Optional: Manually override the displayed frame count (useful for correcting detection issues)
 
 [[videos]]
 path = "video2.mp4"
 heading = "Second Video"
 subheading = "Description for second video"
 # audio_path = "custom_audio2.mp3"  # Optional: Use a different audio track for this video
+# frame_count_override = 300  # Optional: Override frame count if auto-detection is wrong
 
 [[videos]]
 path = "image1.jpg"  # Images are supported too!

@@ -38,11 +38,21 @@ def get_video_info(video_path: str) -> dict:
         video_stream.get("duration") or probe.get("format", {}).get("duration", 0)
     )
 
+    # Calculate frame count
+    # Try to get from nb_frames first (most accurate if available)
+    frame_count = video_stream.get("nb_frames")
+    if frame_count:
+        frame_count = int(frame_count)
+    else:
+        # Calculate from duration and fps
+        frame_count = int(duration * fps)
+
     return {
         "width": int(video_stream["width"]),
         "height": int(video_stream["height"]),
         "fps": fps,
         "duration": duration,
+        "frame_count": frame_count,
     }
 
 
@@ -64,11 +74,26 @@ def create_composite_video(config):
     for idx, video_config in enumerate(config.videos):
         print(f"  [{idx + 1}] Loading: {video_config.path}")
         info = get_video_info(str(video_config.path))
+
+        # Use manual override if provided, otherwise use detected frame count
+        if video_config.frame_count_override is not None:
+            info["frame_count"] = video_config.frame_count_override
+            frame_count_suffix = " (manual override)"
+        else:
+            frame_count_suffix = ""
+
         video_infos.append(info)
-        print(
-            f"      Size: {info['width']}x{info['height']}, "
-            f"Duration: {info['duration']:.2f}s, FPS: {info['fps']:.1f}"
-        )
+        if config.show_frame_count:
+            print(
+                f"      Size: {info['width']}x{info['height']}, "
+                f"Duration: {info['duration']:.2f}s, FPS: {info['fps']:.1f}, "
+                f"Frames: {info['frame_count']}{frame_count_suffix}"
+            )
+        else:
+            print(
+                f"      Size: {info['width']}x{info['height']}, "
+                f"Duration: {info['duration']:.2f}s, FPS: {info['fps']:.1f}"
+            )
 
     # Find max dimensions and duration
     max_height = max(info["height"] for info in video_infos)
@@ -162,6 +187,43 @@ def create_composite_video(config):
                 fontcolor=config.text_color,
                 x="(w-text_w)/2",
                 y=subheading_y,
+            )
+
+        # Add frame count overlay in top-left corner
+        if config.show_frame_count:
+            # Get frame count (use override if provided)
+            if video_config.frame_count_override is not None:
+                frame_count = video_config.frame_count_override
+            else:
+                frame_count = info["frame_count"]
+
+            # Calculate box dimensions for frame count
+            frame_count_padding = 10
+            frame_count_box_width = int(
+                config.frame_count_font_size * 4
+            )  # Approximate width
+            frame_count_box_height = int(config.frame_count_font_size * 1.5)
+
+            # Add background box for frame count
+            v = v.filter(
+                "drawbox",
+                x=0,
+                y=0,
+                color=f"black@{config.text_bg_opacity}",
+                width=frame_count_box_width,
+                height=frame_count_box_height,
+                t="fill",
+            )
+
+            # Add frame count text
+            frame_count_text = f"Frames: {frame_count}"
+            v = v.filter(
+                "drawtext",
+                text=frame_count_text,
+                fontsize=config.frame_count_font_size,
+                fontcolor=config.text_color,
+                x=frame_count_padding,
+                y=frame_count_padding,
             )
 
         processed_streams.append(v)
