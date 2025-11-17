@@ -11,12 +11,15 @@ A pure ffmpeg-based tool for compositing multiple videos side-by-side with text 
 - **Automatic normalization**: Videos are automatically resized to match heights and extended to longest duration
 - **Pure ffmpeg**: Ultra-fast processing using ffmpeg directly (via ffmpeg-python library)
 - **Dynamic spacing**: Text spacing automatically scales with font size
+- **Google Drive support**: Automatically download and cache files from Google Drive links
+- **Smart directory detection**: Pass a directory name and it automatically finds the matching .toml file
 
 ## Requirements
 
 - Python 3.12+
 - **ffmpeg** (must be installed separately - this is the actual video processor)
 - ffmpeg-python 0.2.0+ (Python wrapper - installed automatically)
+- requests 2.31.0+ (for Google Drive downloads - installed automatically)
 
 ### Installing ffmpeg
 
@@ -40,7 +43,7 @@ brew install ffmpeg
 ```bash
 uv sync
 # or if using pip:
-pip install ffmpeg-python
+pip install ffmpeg-python requests
 ```
 
 **Note**: The script uses Python's built-in `tomllib` (available in Python 3.11+) for TOML parsing.
@@ -65,6 +68,18 @@ This tool uses **pure ffmpeg** for maximum speed:
 - **FPS**: Auto-detected from source videos
 
 ## Usage
+
+### Basic Usage
+
+**Method 1: Using config file directly**
+```bash
+python main.py config.toml
+```
+
+**Method 2: Using directory name (auto-finds matching .toml)**
+```bash
+python main.py vid2  # Automatically looks for vid2.toml
+```
 
 ### 1. Create a Configuration File
 
@@ -97,8 +112,10 @@ bg_opacity = 0.7
 # Vertical padding = 60% of heading_font_size
 
 # Videos to composite (side by side)
+# Supports local files and Google Drive links!
 [[videos]]
 path = "video1.mp4"
+# path = "https://drive.google.com/file/d/YOUR_FILE_ID/view"  # Google Drive links work!
 heading = "First Video"
 subheading = "Description for first video"
 
@@ -134,9 +151,45 @@ subheading = "Top View"
 
 ### 3. Run the Composite
 
+**Using config file:**
 ```bash
 python main.py my_config.toml
 ```
+
+**Using directory (auto-detects .toml file):**
+```bash
+# If you have a directory structure like:
+# my_project/
+# my_project.toml
+
+python main.py my_project  # Automatically uses my_project.toml
+```
+
+### Google Drive Support
+
+You can use Google Drive links directly in your config files! Files are automatically downloaded and cached.
+
+```toml
+[[videos]]
+path = "https://drive.google.com/file/d/1ABC123xyz/view"
+heading = "Video from Drive"
+subheading = "Auto-downloaded and cached"
+
+[[videos]]
+path = "local_video.mp4"  # Mix Drive and local files!
+heading = "Local Video"
+```
+
+**Supported Google Drive URL formats:**
+- `https://drive.google.com/file/d/FILE_ID/view`
+- `https://drive.google.com/open?id=FILE_ID`
+- `https://docs.google.com/document/d/FILE_ID/edit`
+
+**Caching:**
+- Files are cached in `./gdrive_cache/` by default
+- Cache duration: 24 hours (configurable)
+- Re-runs use cached files (no re-download)
+- Cache automatically expires and re-downloads after 24 hours
 
 ## How It Works
 
@@ -189,9 +242,11 @@ This means larger fonts automatically get more breathing room!
 ### Video Entries
 
 Each `[[videos]]` section requires:
-- `path`: Path to the video file (required)
+- `path`: Path to the video file or Google Drive URL (required)
 - `heading`: Main text overlay (optional)
 - `subheading`: Secondary text overlay (optional)
+
+**Note:** Google Drive links are automatically detected and downloaded with caching.
 
 ## Examples
 
@@ -260,6 +315,21 @@ Ensure all video paths in your config file are correct. Use absolute paths if re
 [[videos]]
 path = "/home/user/videos/video1.mp4"  # Absolute path
 ```
+
+Or use Google Drive links:
+
+```toml
+[[videos]]
+path = "https://drive.google.com/file/d/YOUR_FILE_ID/view"
+```
+
+### Google Drive Download Fails
+
+If Google Drive downloads fail:
+- Check the file permissions (must be publicly accessible or "Anyone with the link")
+- Verify the URL format is correct
+- Check your internet connection
+- Try clearing the cache: delete the `./gdrive_cache/` directory
 
 ### Memory Issues
 
@@ -335,8 +405,10 @@ ffmpeg -filters | grep drawtext
 video_composite/
 ├── main.py              # Main script (uses ffmpeg-python)
 ├── config_parser.py     # TOML configuration parser
+├── gdrive_fetcher.py    # Google Drive downloader with caching
 ├── example_config.toml  # Example configuration
 ├── pyproject.toml       # Python dependencies
+├── gdrive_cache/        # Cached Google Drive files (auto-created)
 └── README.md            # This file
 ```
 

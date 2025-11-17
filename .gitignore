@@ -39,6 +39,7 @@ uv.lock
 # Project specific
 runs/
 output_composite.mp4
+None/
 
 # IDE
 .vscode/

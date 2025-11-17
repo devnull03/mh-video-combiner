@@ -4,6 +4,7 @@ Uses ffmpeg-python library for clean, fast video processing
 """
 
 import sys
+from pathlib import Path
 
 import ffmpeg
 
@@ -287,11 +288,33 @@ def main():
         create_example_config()
         print("\nUsage:")
         print("  python main.py <config.toml>")
+        print("  python main.py <directory>  # Looks for directory.toml")
         print("\nExample:")
         print("  python main.py example_config.toml")
+        print("  python main.py vid2  # Looks for vid2.toml")
         return
 
-    config_path = sys.argv[1]
+    input_path = sys.argv[1]
+    input_path_obj = Path(input_path)
+
+    # Check if input is a directory
+    if input_path_obj.is_dir():
+        # Look for a .toml file with the same name as the directory
+        dir_name = input_path_obj.name
+        config_path = input_path_obj.parent / f"{dir_name}.toml"
+
+        if not config_path.exists():
+            print(
+                f"\n✗ Error: Directory provided but config file not found: {config_path}"
+            )
+            print(f"\nWhen passing a directory, expected to find: {dir_name}.toml")
+            print(f"in the same location as the directory.")
+            sys.exit(1)
+
+        print(f"\n✓ Found config file for directory: {config_path}")
+        config_path = str(config_path)
+    else:
+        config_path = input_path
 
     try:
         # Load configuration

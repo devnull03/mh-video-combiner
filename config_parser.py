@@ -5,7 +5,9 @@ Handles loading and validating TOML configuration files
 
 import tomllib
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+
+from gdrive_fetcher import GDriveFetcher
 
 
 class VideoConfig:
@@ -17,14 +19,16 @@ class VideoConfig:
         heading: str = "",
         subheading: str = "",
         audio_path: str = "",
-        is_image: bool = None,
-        frame_count_override: int = None,
+        frame_count_override: Optional[int] = None,        
+        is_image: Optional[bool] = None,
+        original_url: Optional[str] = None,
     ):
         self.path = Path(path)
         self.heading = heading
         self.subheading = subheading
         self.audio_path = Path(audio_path) if audio_path else None
         self.frame_count_override = frame_count_override
+        self.original_url = original_url  # Store original URL if it was a Drive link
         # Auto-detect if it's an image based on extension if not specified
         if is_image is None:
             image_extensions = {
@@ -58,8 +62,13 @@ class VideoConfig:
 class CompositeConfig:
     """Main configuration for the video composite"""
 
-    def __init__(self, config_dict: Dict[str, Any]):
+    def __init__(
+        self,
+        config_dict: Dict[str, Any],
+        gdrive_fetcher: Optional[GDriveFetcher] = None,
+    ):
         self.videos: List[VideoConfig] = []
+        self.gdrive_fetcher = gdrive_fetcher
         output_config = config_dict.get("output", {})
         self.working_dir = output_config.get("working_dir", "")
 
@@ -91,13 +100,37 @@ class CompositeConfig:
         videos_list = config_dict.get("videos", [])
         for video_data in videos_list:
             video_path = video_data.get("path", "")
+            original_url = None
+
+            # Check if it's a Google Drive link and fetch it
+            if self.gdrive_fetcher and self.gdrive_fetcher.is_gdrive_link(video_path):
+                print(f"Detected Google Drive link: {video_path}")
+                original_url = video_path
+                fetched_path = self.gdrive_fetcher.fetch(video_path)
+                if fetched_path:
+                    video_path = str(fetched_path)
+                else:
+                    raise ValueError(f"Failed to fetch Google Drive file: {video_path}")
             # Prepend working_dir if set and path is not absolute
-            if self.working_dir and not Path(video_path).is_absolute():
+            elif self.working_dir and not Path(video_path).is_absolute():
                 video_path = str(Path(self.working_dir) / video_path)
 
             audio_path = video_data.get("audio_path", "")
-            if audio_path and self.working_dir and not Path(audio_path).is_absolute():
-                audio_path = str(Path(self.working_dir) / audio_path)
+            if audio_path:
+                # Check if audio is a Google Drive link
+                if self.gdrive_fetcher and self.gdrive_fetcher.is_gdrive_link(
+                    audio_path
+                ):
+                    print(f"Detected Google Drive link for audio: {audio_path}")
+                    fetched_audio = self.gdrive_fetcher.fetch(audio_path)
+                    if fetched_audio:
+                        audio_path = str(fetched_audio)
+                    else:
+                        raise ValueError(
+                            f"Failed to fetch Google Drive audio: {audio_path}"
+                        )
+                elif self.working_dir and not Path(audio_path).is_absolute():
+                    audio_path = str(Path(self.working_dir) / audio_path)
 
             video = VideoConfig(
                 path=video_path,
@@ -106,6 +139,7 @@ class CompositeConfig:
                 audio_path=audio_path,
                 is_image=video_data.get("is_image", None),
                 frame_count_override=video_data.get("frame_count_override", None),
+                original_url=original_url,
             )
             self.videos.append(video)
 
@@ -113,13 +147,37 @@ class CompositeConfig:
         images_list = config_dict.get("image", [])
         for image_data in images_list:
             image_path = image_data.get("path", "")
+            original_url = None
+
+            # Check if it's a Google Drive link and fetch it
+            if self.gdrive_fetcher and self.gdrive_fetcher.is_gdrive_link(image_path):
+                print(f"Detected Google Drive link: {image_path}")
+                original_url = image_path
+                fetched_path = self.gdrive_fetcher.fetch(image_path)
+                if fetched_path:
+                    image_path = str(fetched_path)
+                else:
+                    raise ValueError(f"Failed to fetch Google Drive file: {image_path}")
             # Prepend working_dir if set and path is not absolute
-            if self.working_dir and not Path(image_path).is_absolute():
+            elif self.working_dir and not Path(image_path).is_absolute():
                 image_path = str(Path(self.working_dir) / image_path)
 
             audio_path = image_data.get("audio_path", "")
-            if audio_path and self.working_dir and not Path(audio_path).is_absolute():
-                audio_path = str(Path(self.working_dir) / audio_path)
+            if audio_path:
+                # Check if audio is a Google Drive link
+                if self.gdrive_fetcher and self.gdrive_fetcher.is_gdrive_link(
+                    audio_path
+                ):
+                    print(f"Detected Google Drive link for audio: {audio_path}")
+                    fetched_audio = self.gdrive_fetcher.fetch(audio_path)
+                    if fetched_audio:
+                        audio_path = str(fetched_audio)
+                    else:
+                        raise ValueError(
+                            f"Failed to fetch Google Drive audio: {audio_path}"
+                        )
+                elif self.working_dir and not Path(audio_path).is_absolute():
+                    audio_path = str(Path(self.working_dir) / audio_path)
 
             image = VideoConfig(
                 path=image_path,
@@ -128,6 +186,7 @@ class CompositeConfig:
                 audio_path=audio_path,
                 is_image=True,  # Force as image
                 frame_count_override=image_data.get("frame_count_override", None),
+                original_url=original_url,
             )
             self.videos.append(image)
 
@@ -147,12 +206,16 @@ class CompositeConfig:
         )
 
 
-def load_config(config_path: str) -> CompositeConfig:
+def load_config(
+    config_path: str, cache_dir: str | None = None, cache_duration: int = 86400
+) -> CompositeConfig:
     """
     Load and parse a TOML configuration file
 
     Args:
         config_path: Path to the TOML configuration file
+        cache_dir: Directory for caching Google Drive files (default: ./gdrive_cache)
+        cache_duration: Cache duration in seconds (default: 86400 = 24 hours)
 
     Returns:
         CompositeConfig object with parsed configuration
@@ -170,8 +233,11 @@ def load_config(config_path: str) -> CompositeConfig:
     with open(config_file, "rb") as f:
         config_dict = tomllib.load(f)
 
+    # Initialize Google Drive fetcher
+    gdrive_fetcher = GDriveFetcher(cache_dir=str(cache_dir), cache_duration=cache_duration)
+
     # Parse and validate
-    config = CompositeConfig(config_dict)
+    config = CompositeConfig(config_dict, gdrive_fetcher=gdrive_fetcher)
     config.validate()
 
     return config
@@ -212,11 +278,14 @@ bg_opacity = 0.7
 # Note: Images are auto-detected by extension (.jpg, .png, etc.)
 # You can also manually set is_image = true/false
 # Note: If working_dir is set, all relative paths will be prepended with it
+# Note: Google Drive links are automatically detected and downloaded with caching
 [[videos]]
 path = "video1.mp4"  # Will become "working_dir/video1.mp4" if working_dir is set
+# path = "https://drive.google.com/file/d/YOUR_FILE_ID/view"  # Google Drive links are supported!
 heading = "First Video"
 subheading = "Description for first video"
 # audio_path = "custom_audio1.mp3"  # Optional: Use a different audio track for this video
+# audio_path = "https://drive.google.com/file/d/YOUR_AUDIO_ID/view"  # Drive links work for audio too!
 # frame_count_override = 150  # Optional: Manually override the displayed frame count (useful for correcting detection issues)
 
 [[videos]]
