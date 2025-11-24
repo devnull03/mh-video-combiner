@@ -19,7 +19,9 @@ class VideoConfig:
         heading: str = "",
         subheading: str = "",
         audio_path: str = "",
-        frame_count_override: Optional[int] = None,        
+        frame_count_override: Optional[int] = None,
+        skip_frames: int = 0,
+        max_frames: Optional[int] = None,
         is_image: Optional[bool] = None,
         original_url: Optional[str] = None,
     ):
@@ -28,6 +30,8 @@ class VideoConfig:
         self.subheading = subheading
         self.audio_path = Path(audio_path) if audio_path else None
         self.frame_count_override = frame_count_override
+        self.skip_frames = skip_frames
+        self.max_frames = max_frames
         self.original_url = original_url  # Store original URL if it was a Drive link
         # Auto-detect if it's an image based on extension if not specified
         if is_image is None:
@@ -139,6 +143,8 @@ class CompositeConfig:
                 audio_path=audio_path,
                 is_image=video_data.get("is_image", None),
                 frame_count_override=video_data.get("frame_count_override", None),
+                skip_frames=video_data.get("skip_frames", 0),
+                max_frames=video_data.get("max_frames", None),
                 original_url=original_url,
             )
             self.videos.append(video)
@@ -186,6 +192,8 @@ class CompositeConfig:
                 audio_path=audio_path,
                 is_image=True,  # Force as image
                 frame_count_override=image_data.get("frame_count_override", None),
+                skip_frames=image_data.get("skip_frames", 0),
+                max_frames=image_data.get("max_frames", None),
                 original_url=original_url,
             )
             self.videos.append(image)
@@ -234,7 +242,9 @@ def load_config(
         config_dict = tomllib.load(f)
 
     # Initialize Google Drive fetcher
-    gdrive_fetcher = GDriveFetcher(cache_dir=str(cache_dir), cache_duration=cache_duration)
+    gdrive_fetcher = GDriveFetcher(
+        cache_dir=str(cache_dir), cache_duration=cache_duration
+    )
 
     # Parse and validate
     config = CompositeConfig(config_dict, gdrive_fetcher=gdrive_fetcher)

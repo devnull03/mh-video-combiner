@@ -1,0 +1,46 @@
+# Test Configuration for Frame Skipping and Trimming Features
+
+[output]
+path = "test_trimming_output.mp4"
+show_frame_count = true
+working_dir = "runs/nov23/"
+preset = "ultrafast"
+threads = 4
+bitrate = "5000k"
+
+[text]
+heading_font_size = 60
+subheading_font_size = 36
+frame_count_font_size = 30
+color = "white"
+bg_color = [0, 0, 0]
+bg_opacity = 0.7
+
+# Test 1: Original video with no trimming
+[[videos]]
+path = "Download(1).mp4"
+heading = "Original - No Trim"
+subheading = "All frames"
+
+# Test 2: Skip first 30 frames (1 second at 30fps)
+[[videos]]
+path = "Download(1).mp4"
+heading = "Skip First 30 Frames"
+subheading = "Skips first 1 second"
+skip_frames = 30
+
+# Test 3: Load only first 150 frames (5 seconds)
+[[videos]]
+path = "Download(1).mp4"
+heading = "Max 150 Frames"
+subheading = "First 5 seconds only"
+max_frames = 150
+
+# Test 4: Skip 30 frames AND cap at 90 frames
+# This will show frames 30-119 (90 frames = 3 seconds)
+[[videos]]
+path = "Download(1).mp4"
+heading = "Skip 30 + Max 90"
+subheading = "Frames 30-119"
+skip_frames = 30
+max_frames = 90

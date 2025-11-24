@@ -76,12 +76,49 @@ def create_composite_video(config):
         print(f"  [{idx + 1}] Loading: {video_config.path}")
         info = get_video_info(str(video_config.path))
 
-        # Use manual override if provided, otherwise use detected frame count
+        # Calculate effective frame count based on skip_frames and max_frames
+        original_frame_count = info["frame_count"]
+
+        # Use manual override if provided
         if video_config.frame_count_override is not None:
-            info["frame_count"] = video_config.frame_count_override
-            frame_count_suffix = " (manual override)"
-        else:
-            frame_count_suffix = ""
+            original_frame_count = video_config.frame_count_override
+
+        # Apply skip_frames and max_frames logic
+        effective_frame_count = original_frame_count - video_config.skip_frames
+        if video_config.max_frames is not None:
+            effective_frame_count = min(effective_frame_count, video_config.max_frames)
+
+        # Ensure we don't have negative frames
+        effective_frame_count = max(0, effective_frame_count)
+
+        info["frame_count"] = effective_frame_count
+        info["original_frame_count"] = original_frame_count
+        info["skip_frames"] = video_config.skip_frames
+        info["max_frames"] = video_config.max_frames
+
+        # Calculate effective duration after trimming
+        if video_config.skip_frames > 0 or video_config.max_frames is not None:
+            # Duration = effective_frame_count / fps
+            info["duration"] = effective_frame_count / info["fps"]
+
+        # Build frame count suffix for display
+        frame_count_suffix = ""
+        if video_config.frame_count_override is not None:
+            frame_count_suffix = " (manual override"
+        if video_config.skip_frames > 0 or video_config.max_frames is not None:
+            if frame_count_suffix:
+                frame_count_suffix += ", "
+            else:
+                frame_count_suffix = " ("
+            if video_config.skip_frames > 0:
+                frame_count_suffix += f"skip {video_config.skip_frames}"
+            if video_config.max_frames is not None:
+                if video_config.skip_frames > 0:
+                    frame_count_suffix += f", max {video_config.max_frames}"
+                else:
+                    frame_count_suffix += f"max {video_config.max_frames}"
+        if frame_count_suffix:
+            frame_count_suffix += ")"
 
         video_infos.append(info)
         if config.show_frame_count:
@@ -106,13 +143,44 @@ def create_composite_video(config):
     print(f"  Max duration: {max_duration:.2f}s")
     print(f"  Output FPS: {output_fps:.1f}")
 
+    # Show which videos need height adjustment
+    videos_needing_adjustment = [
+        (idx + 1, info["height"])
+        for idx, info in enumerate(video_infos)
+        if info["height"] != max_height
+    ]
+    if videos_needing_adjustment:
+        print(f"\n  Height adjustments (scaling to match tallest):")
+        for video_num, original_height in videos_needing_adjustment:
+            print(f"    Video {video_num}: {original_height}px → {max_height}px")
+    else:
+        print(f"\n  ✓ All videos already at max height ({max_height}px)")
+
     # Step 2: Build ffmpeg filter chain
     print("\nBuilding filter chain...")
 
-    # Create input streams
+    # Create input streams and apply trimming at input level
     input_streams = []
-    for video_config in config.videos:
-        input_streams.append(ffmpeg.input(str(video_config.path)))
+    for video_config, info in zip(config.videos, video_infos):
+        # Apply skip_frames and max_frames using ss and t input options
+        # This is done at the input level before demuxing, which is more efficient
+        # and keeps audio/video in sync
+        input_kwargs = {}
+
+        if video_config.skip_frames > 0 or video_config.max_frames is not None:
+            fps = info["fps"]
+
+            # Calculate start time from skip_frames
+            if video_config.skip_frames > 0:
+                start_time = video_config.skip_frames / fps
+                input_kwargs["ss"] = start_time
+
+            # Calculate duration if max_frames is specified
+            if video_config.max_frames is not None:
+                duration = video_config.max_frames / fps
+                input_kwargs["t"] = duration
+
+        input_streams.append(ffmpeg.input(str(video_config.path), **input_kwargs))
 
     # Process each video stream
     processed_streams = []
