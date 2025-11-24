@@ -301,7 +301,7 @@ def main():
     if input_path_obj.is_dir():
         # Look for a .toml file with the same name as the directory
         dir_name = input_path_obj.name
-        config_path = input_path_obj.parent / f"{dir_name}.toml"
+        config_path = input_path_obj / f"{dir_name}.toml"
 
         if not config_path.exists():
             print(
