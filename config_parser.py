@@ -242,9 +242,7 @@ def load_config(
         config_dict = tomllib.load(f)
 
     # Initialize Google Drive fetcher
-    gdrive_fetcher = GDriveFetcher(
-        cache_dir=str(cache_dir), cache_duration=cache_duration
-    )
+    gdrive_fetcher = GDriveFetcher(cache_dir=cache_dir, cache_duration=cache_duration)
 
     # Parse and validate
     config = CompositeConfig(config_dict, gdrive_fetcher=gdrive_fetcher)

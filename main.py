@@ -139,9 +139,17 @@ def create_composite_video(config):
     fps = video_infos[0]["fps"]  # Use first video's FPS
     output_fps = config.output_fps if config.output_fps else fps
 
+    # Calculate max width per video to keep total composite reasonable
+    # Limit total width to 8192px (common player limit), divided by number of videos
+    max_total_width = 8192
+    max_width_per_video = max_total_width // len(config.videos)
+
     print(f"\n  Max height: {max_height}px")
     print(f"  Max duration: {max_duration:.2f}s")
     print(f"  Output FPS: {output_fps:.1f}")
+    print(
+        f"  Max width per video: {max_width_per_video}px (total limit: {max_total_width}px)"
+    )
 
     # Show which videos need height adjustment
     videos_needing_adjustment = [
@@ -190,8 +198,24 @@ def create_composite_video(config):
         # Get video stream
         v = stream.video
 
-        # Scale to max height
-        v = v.filter("scale", -2, max_height)
+        # Scale to max height, constrained by max width per video
+        # Calculate width to maintain aspect ratio at max_height
+        original_aspect = info["width"] / info["height"]
+        new_width = int(max_height * original_aspect)
+
+        # Constrain width to max_width_per_video to avoid excessively wide output
+        if new_width > max_width_per_video:
+            new_width = max_width_per_video
+            # Recalculate height based on constrained width
+            constrained_height = int(new_width / original_aspect)
+            # Calculate padding to center vertically
+            vertical_padding = (max_height - constrained_height) // 2
+            # Use letterboxing to maintain original aspect in max_height space
+            v = v.filter("scale", new_width, constrained_height)
+            v = v.filter("pad", w=new_width, h=max_height, x=0, y=vertical_padding)
+        else:
+            # Width is fine, just scale to max_height
+            v = v.filter("scale", new_width, max_height)
 
         # Pad video to max duration if needed
         if info["duration"] < max_duration:
@@ -383,7 +407,12 @@ def create_composite_video(config):
 
     except ffmpeg.Error as e:
         print("\n✗ FFmpeg encoding failed:")
-        print(e.stderr.decode() if e.stderr else str(e))
+        if e.stderr:
+            print(e.stderr.decode())
+        elif e.stdout:
+            print(e.stdout.decode())
+        else:
+            print(str(e))
         raise
     except FileNotFoundError:
         print("\n✗ Error: ffmpeg not found")

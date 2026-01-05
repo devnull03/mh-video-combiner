@@ -167,6 +167,35 @@ class GDriveFetcher:
                         response = session.get(url, stream=True)
                         break
 
+            # Check for virus scan warning page
+            # Google Drive sometimes returns a warning page that requires confirmation
+            content_type = response.headers.get("Content-Type", "")
+            if "text/html" in content_type:
+                # Try to extract the UUID from the HTML and retry with confirmation
+                try:
+                    html_content = response.text
+                    if "Google Drive can't scan this file for viruses" in html_content:
+                        # Extract UUID from the form
+                        import re
+
+                        uuid_match = re.search(
+                            r'value="([a-f0-9\-]{36})"', html_content
+                        )
+                        if uuid_match:
+                            uuid = uuid_match.group(1)
+                            # Retry with the UUID confirmation
+                            url_with_uuid = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t&uuid={uuid}"
+                            response = session.get(url_with_uuid, stream=True)
+                            response.raise_for_status()
+                            # Save the file
+                            with open(output_path, "wb") as f:
+                                for chunk in response.iter_content(chunk_size=8192):
+                                    if chunk:
+                                        f.write(chunk)
+                            return True
+                except Exception as e:
+                    print(f"Warning: Could not handle virus scan warning: {e}")
+
             response.raise_for_status()
 
             # Save the file
@@ -174,6 +203,22 @@ class GDriveFetcher:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
+
+            # Validate that the file was actually downloaded (not an error page)
+            # Error pages are typically small (< 10KB) and contain HTML
+            file_size = output_path.stat().st_size
+            if file_size < 10240:  # Less than 10KB is suspicious for media files
+                try:
+                    with open(output_path, "r", encoding="utf-8", errors="ignore") as f:
+                        content = f.read(1000)
+                        if "<!DOCTYPE" in content or "<html" in content:
+                            print(
+                                f"Error: Downloaded file appears to be an HTML error page"
+                            )
+                            output_path.unlink()
+                            return False
+                except Exception:
+                    pass  # If we can't read it as text, assume it's binary
 
             return True
 
