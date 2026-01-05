@@ -301,9 +301,48 @@ def create_composite_video(config):
     print(f"  Stacking {len(processed_streams)} videos horizontally...")
     stacked = ffmpeg.filter(processed_streams, "hstack", inputs=len(processed_streams))
 
-    # Step 3: Get audio from first video
-    print("\nAdding audio from first video...")
-    first_audio = input_streams[0].audio
+    # Step 3: Choose audio source (prefer explicit audio_path, otherwise first available audio stream)
+    print("\nAdding audio from first available source...")
+
+    audio_input = None
+
+    # Prefer explicit audio_path on the first video config if provided
+    if config.videos:
+        first_vcfg = config.videos[0]
+        explicit_audio = getattr(first_vcfg, "audio_path", None)
+        if explicit_audio:
+            # Accept either Path or str
+            try:
+                explicit_path = str(explicit_audio)
+                if Path(explicit_path).exists():
+                    audio_input = ffmpeg.input(explicit_path).audio
+                    print(f"  Using explicit audio file: {explicit_path}")
+            except Exception:
+                # If explicit audio_path is invalid, fall through to probing inputs
+                audio_input = None
+
+    # If no explicit audio, probe inputs to find first with an audio stream
+    if audio_input is None:
+        for idx, vcfg in enumerate(config.videos):
+            try:
+                probe = ffmpeg.probe(str(vcfg.path))
+                has_audio = any(
+                    s
+                    for s in probe.get("streams", [])
+                    if s.get("codec_type") == "audio"
+                )
+            except (ffmpeg.Error, FileNotFoundError):
+                has_audio = False
+
+            if has_audio:
+                audio_input = input_streams[idx].audio
+                print(f"  Using audio from video {idx + 1}: {vcfg.path}")
+                break
+
+    if audio_input is None:
+        print(
+            "  No audio stream found in inputs. Output will be generated without audio."
+        )
 
     # Step 4: Output with encoding settings
     print("\nEncoding video with ffmpeg...")
@@ -314,24 +353,32 @@ def create_composite_video(config):
     print("Encoding...\n")
 
     try:
-        output = ffmpeg.output(
-            stacked,
-            first_audio,
-            str(config.output_path),
-            r=output_fps,
-            vcodec="libx264",
-            acodec="aac",
-            audio_bitrate="192k",
-            preset=config.output_preset,
-            video_bitrate=config.output_bitrate,
-            threads=config.output_threads,
-        )
+        # Build output args/kwargs depending on whether audio is available
+        output_kwargs = {
+            "r": output_fps,
+            "vcodec": "libx264",
+            "preset": config.output_preset,
+            "video_bitrate": config.output_bitrate,
+            "threads": config.output_threads,
+        }
+
+        if audio_input is not None:
+            # Include audio encoding options only when we have an audio stream
+            output_args = (stacked, audio_input, str(config.output_path))
+            output_kwargs.update({"acodec": "aac", "audio_bitrate": "192k"})
+        else:
+            output_args = (stacked, str(config.output_path))
+
+        output = ffmpeg.output(*output_args, **output_kwargs)
 
         # Run with error stats
         ffmpeg.run(output, overwrite_output=True, quiet=False)
 
         print(f"\n✓ Video composite saved to: {config.output_path}")
-        print("✓ Audio from first video included")
+        if audio_input is not None:
+            print("✓ Audio included")
+        else:
+            print("✓ No audio included")
         print("\n✓ Done!")
 
     except ffmpeg.Error as e:
