@@ -135,6 +135,7 @@ def create_composite_video(config):
 
     # Find max dimensions and duration
     max_height = max(info["height"] for info in video_infos)
+    target_height = max_height if max_height % 2 == 0 else max_height - 1
     max_duration = max(info["duration"] for info in video_infos)
     fps = video_infos[0]["fps"]  # Use first video's FPS
     output_fps = config.output_fps if config.output_fps else fps
@@ -145,6 +146,8 @@ def create_composite_video(config):
     max_width_per_video = max_total_width // len(config.videos)
 
     print(f"\n  Max height: {max_height}px")
+    if target_height != max_height:
+        print(f"  Adjusted height for encoding: {target_height}px (even)")
     print(f"  Max duration: {max_duration:.2f}s")
     print(f"  Output FPS: {output_fps:.1f}")
     print(
@@ -155,14 +158,14 @@ def create_composite_video(config):
     videos_needing_adjustment = [
         (idx + 1, info["height"])
         for idx, info in enumerate(video_infos)
-        if info["height"] != max_height
+        if info["height"] != target_height
     ]
     if videos_needing_adjustment:
         print(f"\n  Height adjustments (scaling to match tallest):")
         for video_num, original_height in videos_needing_adjustment:
-            print(f"    Video {video_num}: {original_height}px → {max_height}px")
+            print(f"    Video {video_num}: {original_height}px → {target_height}px")
     else:
-        print(f"\n  ✓ All videos already at max height ({max_height}px)")
+        print(f"\n  ✓ All videos already at max height ({target_height}px)")
 
     # Step 2: Build ffmpeg filter chain
     print("\nBuilding filter chain...")
@@ -198,24 +201,35 @@ def create_composite_video(config):
         # Get video stream
         v = stream.video
 
-        # Scale to max height, constrained by max width per video
-        # Calculate width to maintain aspect ratio at max_height
+        # Scale to target height, constrained by max width per video
+        # Calculate width to maintain aspect ratio at target_height
         original_aspect = info["width"] / info["height"]
-        new_width = int(max_height * original_aspect)
+        new_width = int(target_height * original_aspect)
 
         # Constrain width to max_width_per_video to avoid excessively wide output
         if new_width > max_width_per_video:
             new_width = max_width_per_video
             # Recalculate height based on constrained width
             constrained_height = int(new_width / original_aspect)
-            # Calculate padding to center vertically
-            vertical_padding = (max_height - constrained_height) // 2
-            # Use letterboxing to maintain original aspect in max_height space
+
+            # Ensure even dimensions for encoding stability
+            if new_width % 2 == 1:
+                new_width -= 1
+            if constrained_height % 2 == 1:
+                constrained_height -= 1
+
+            # Clamp pad height so it is never smaller than the input
+            pad_height = max(target_height, constrained_height)
+            vertical_padding = max(0, (pad_height - constrained_height) // 2)
+
+            # Use letterboxing to maintain original aspect in target_height space
             v = v.filter("scale", new_width, constrained_height)
-            v = v.filter("pad", w=new_width, h=max_height, x=0, y=vertical_padding)
+            v = v.filter("pad", w=new_width, h=pad_height, x=0, y=vertical_padding)
         else:
-            # Width is fine, just scale to max_height
-            v = v.filter("scale", new_width, max_height)
+            # Width is fine, just scale to target_height
+            if new_width % 2 == 1:
+                new_width -= 1
+            v = v.filter("scale", new_width, target_height)
 
         # Pad video to max duration if needed
         if info["duration"] < max_duration:
