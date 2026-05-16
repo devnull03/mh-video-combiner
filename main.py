@@ -11,42 +11,70 @@ import ffmpeg
 from config_parser import create_example_config, load_config
 
 
-def get_video_info(video_path: str) -> dict:
-    """Get video information using ffmpeg.probe"""
+def get_media_info(media_path: str, is_image: bool) -> dict:
+    """Get width, height, fps, duration, and frame count via ffprobe."""
+    path_str = str(media_path)
+    last_error: ffmpeg.Error | None = None
+
+    def _probe(**kwargs):
+        return ffmpeg.probe(path_str, **kwargs)
+
     try:
-        probe = ffmpeg.probe(str(video_path))
+        if is_image:
+            probe = None
+            for kwargs in ({}, {"f": "image2"}):
+                try:
+                    probe = _probe(**kwargs)
+                    break
+                except ffmpeg.Error as e:
+                    last_error = e
+            if probe is None and last_error is not None:
+                raise last_error
+            assert probe is not None
+        else:
+            probe = _probe()
     except ffmpeg.Error as e:
-        raise RuntimeError(f"Failed to probe {video_path}: {e.stderr.decode()}")
+        raise RuntimeError(f"Failed to probe {path_str}: {e.stderr.decode()}")
     except FileNotFoundError:
         raise RuntimeError(
             "ffmpeg/ffprobe not found. Please install ffmpeg: https://ffmpeg.org/download.html"
         )
 
-    # Get video stream
     video_stream = next(
         (s for s in probe["streams"] if s["codec_type"] == "video"), None
     )
     if not video_stream:
-        raise RuntimeError(f"No video stream found in {video_path}")
+        raise RuntimeError(f"No video stream found in {path_str}")
 
-    # Parse frame rate
     fps_str = video_stream.get("r_frame_rate", "30/1")
-    num, den = map(int, fps_str.split("/"))
-    fps = num / den if den != 0 else 30
+    try:
+        num, den = map(int, str(fps_str).split("/"))
+        fps = num / den if den != 0 else 30.0
+    except (ValueError, TypeError):
+        fps = 30.0
 
-    # Get duration
-    duration = float(
-        video_stream.get("duration") or probe.get("format", {}).get("duration", 0)
+    if is_image and (fps <= 0 or fps != fps):
+        fps = 30.0
+
+    duration_raw = video_stream.get("duration") or probe.get("format", {}).get(
+        "duration", 0
     )
+    try:
+        duration = float(duration_raw) if duration_raw else 0.0
+    except (TypeError, ValueError):
+        duration = 0.0
 
-    # Calculate frame count
-    # Try to get from nb_frames first (most accurate if available)
+    if is_image:
+        duration = 1.0 / fps if fps > 0 else 1 / 30.0
+
     frame_count = video_stream.get("nb_frames")
-    if frame_count:
+    if frame_count not in (None, "N/A"):
         frame_count = int(frame_count)
     else:
-        # Calculate from duration and fps
-        frame_count = int(duration * fps)
+        frame_count = int(duration * fps) if fps > 0 else 0
+
+    if is_image:
+        frame_count = max(1, frame_count)
 
     return {
         "width": int(video_stream["width"]),
@@ -74,7 +102,7 @@ def create_composite_video(config):
     video_infos = []
     for idx, video_config in enumerate(config.videos):
         print(f"  [{idx + 1}] Loading: {video_config.path}")
-        info = get_video_info(str(video_config.path))
+        info = get_media_info(str(video_config.path), video_config.is_image)
 
         # Calculate effective frame count based on skip_frames and max_frames
         original_frame_count = info["frame_count"]
@@ -120,12 +148,24 @@ def create_composite_video(config):
         if frame_count_suffix:
             frame_count_suffix += ")"
 
+        info["_frame_count_suffix"] = frame_count_suffix
         video_infos.append(info)
+
+    reference_fps = video_infos[0]["fps"]
+    for video_config, info in zip(config.videos, video_infos):
+        if video_config.is_image:
+            info["fps"] = reference_fps
+            info["duration"] = (
+                info["frame_count"] / reference_fps if reference_fps > 0 else 0.0
+            )
+
+    for video_config, info in zip(config.videos, video_infos):
+        suffix = info.pop("_frame_count_suffix", "")
         if config.show_frame_count:
             print(
                 f"      Size: {info['width']}x{info['height']}, "
                 f"Duration: {info['duration']:.2f}s, FPS: {info['fps']:.1f}, "
-                f"Frames: {info['frame_count']}{frame_count_suffix}"
+                f"Frames: {info['frame_count']}{suffix}"
             )
         else:
             print(
@@ -177,6 +217,9 @@ def create_composite_video(config):
         # This is done at the input level before demuxing, which is more efficient
         # and keeps audio/video in sync
         input_kwargs = {}
+        if video_config.is_image:
+            input_kwargs["loop"] = 1
+            input_kwargs["framerate"] = info["fps"]
 
         if video_config.skip_frames > 0 or video_config.max_frames is not None:
             fps = info["fps"]

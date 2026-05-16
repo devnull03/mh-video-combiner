@@ -42,7 +42,11 @@ class VideoConfig:
                 ".gif",
                 ".bmp",
                 ".tiff",
+                ".tif",
                 ".webp",
+                ".avif",
+                ".heic",
+                ".heif",
             }
             self.is_image = self.path.suffix.lower() in image_extensions
         else:
